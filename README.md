@@ -23,6 +23,8 @@ AutoML System v2 introduces **3 separate Gemini-powered features**, each using i
 - Interactive data exploration
 - AI-generated insights and summaries
 - Conversational data analysis
+- **NEW**: AI-powered visualization suggestions
+- **NEW**: Automatic chart generation from chat responses
 
 ## 🚀 Quick Start
 
@@ -59,6 +61,10 @@ echo "GOOGLE_API_KEY=your_single_key" > .env
 ### 3. Launch the Enhanced Web Interface
 
 ```bash
+# Enhanced interface with 6 tabs including visualization
+streamlit run app.py
+
+# Or use the original interface
 streamlit run streamlit_app.py
 ```
 
@@ -94,6 +100,15 @@ streamlit run streamlit_app.py
 - Real-time data insights
 - Interactive exploration
 - AI-generated recommendations
+- **NEW**: AI-powered visualization suggestions
+- **NEW**: Automatic chart generation from chat responses
+
+### 📊 **Advanced Data Visualization**
+- **NEW**: Interactive chart generation for numerical and categorical data
+- **NEW**: Multiple chart types (histograms, scatter plots, bar charts, correlation matrices)
+- **NEW**: AI-powered visualization recommendations
+- **NEW**: Real-time chart generation with one-click buttons
+- **NEW**: Dedicated visualization tab with comprehensive options
 
 ### 📈 **Comprehensive Results**
 - Model performance comparison
@@ -167,6 +182,26 @@ print(response['text'])
 insights = chat_agent.get_data_insights()
 ```
 
+### Advanced Data Visualization
+
+```python
+from components.data_analyzer import DataAnalyzer
+
+# Initialize enhanced data analyzer
+analyzer = DataAnalyzer()
+analyzer.analyze_dataset(df, target_column='target')
+
+# Generate visualizations
+visualizations = analyzer.generate_visualizations("distribution")
+correlation_charts = analyzer.generate_visualizations("correlation")
+missing_data_charts = analyzer.generate_visualizations("missing")
+
+# Chat with data and get visualization suggestions
+response = analyzer.chat_with_data("Show me the relationship between age and income")
+if response.get('chart_suggestion'):
+    chart_data = analyzer._create_suggested_visualization(response['chart_suggestion'])
+```
+
 ## 🛠️ Configuration
 
 ### API Key Management
@@ -224,7 +259,8 @@ automl_system_gemini_v2/
 ├── config/
 │   └── settings.py          # 🔑 Enhanced configuration
 ├── main.py                  # 🚀 Enhanced AutoML orchestration
-├── streamlit_app.py         # 🖥️ Enhanced web interface (6 tabs)
+├── app.py                   # 🖥️ Enhanced web interface (6 tabs with visualization)
+├── streamlit_app.py         # 🖥️ Original web interface (5 tabs)
 ├── requirements.txt         # 📦 Enhanced dependencies
 └── README.md               # 📖 This documentation
 ```

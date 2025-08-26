@@ -19,6 +19,7 @@ from components.utils import validate_dataframe, ModelPredictor
 from components.model_advisor import get_gemini_advisor_info
 from components.data_cleaner import create_data_cleaning_agent
 from components.chat_agent import create_chat_agent
+from components.data_analyzer import analyze_uploaded_data, DataAnalyzer
 from config.settings import (
     MAX_FILE_SIZE_MB, DEFAULT_TIME_LIMIT_MINUTES,
     MODEL_TRAINING_CONFIG, DATA_CLEANING_CONFIG, CHAT_WITH_DATA_CONFIG
@@ -26,7 +27,7 @@ from config.settings import (
 
 # Page configuration
 st.set_page_config(
-    page_title="AutoML System v2",
+    page_title="AutoML System",
     page_icon="🚀",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -101,6 +102,8 @@ def initialize_session_state():
         'cleaning_suggestions': None,
         'chat_history': [],
         'chat_agent': None,
+        'data_analyzer': None,
+        'current_visualizations': None,
         'current_step': 1,
         'analysis_results': None
     }
@@ -185,7 +188,7 @@ def display_main_navigation():
     """Simplified tab navigation"""
 
     # Progress indicator
-    steps = ["📊 Upload", "🔍 Explore", "🤖 AutoML", "💬 Chat", "📈 Results"]
+    steps = ["📊 Upload", "🔍 Explore", "📈 Visualize", "🤖 AutoML", "💬 Chat", "📈 Results"]
     current = st.session_state.get('current_step', 1)
 
     progress_html = '<div style="display: flex; justify-content: space-between; margin: 2rem 0;">'
@@ -197,8 +200,8 @@ def display_main_navigation():
     progress_html += '</div>'
     st.markdown(progress_html, unsafe_allow_html=True)
 
-    # Main tabs - simplified
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Data", "🔍 Explore", "🤖 AutoML", "💬 Chat", "📈 Results"])
+    # Main tabs - enhanced with visualization
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Data", "🔍 Explore", "📈 Visualize", "🤖 AutoML", "💬 Chat", "📈 Results"])
 
     with tab1:
         data_section()
@@ -207,12 +210,15 @@ def display_main_navigation():
         explore_section()
 
     with tab3:
-        automl_section()
+        visualize_section()
 
     with tab4:
-        chat_section()
+        automl_section()
 
     with tab5:
+        chat_section()
+
+    with tab6:
         results_section()
 
 def data_section():
@@ -323,7 +329,7 @@ def explore_section():
             st.info(f"Shape: {original_shape} → {cleaned_shape}")
 
     with col2:
-        st.subheader("🔍 Quick Analysis")
+        st.subheader("🔍 Quick Analysis & Visualization")
 
         # Use cleaned data if available
         analysis_df = st.session_state.cleaned_data if st.session_state.cleaned_data is not None else df
@@ -337,12 +343,20 @@ def explore_section():
         if target_column == "Auto-detect":
             target_column = None
 
+        # Analysis and visualization options
+        analysis_type = st.selectbox(
+            "Analysis type:",
+            ["Basic Analysis", "Generate Visualizations", "Chat with Data"]
+        )
+
         if st.button("🔍 Analyze Dataset"):
             with st.spinner("Analyzing..."):
                 try:
-                    from components.data_analyzer import analyze_uploaded_data
+                    # Initialize analyzer
+                    analyzer = DataAnalyzer()
                     analysis_results = analyze_uploaded_data(analysis_df, target_column)
                     st.session_state.analysis_results = analysis_results
+                    st.session_state.data_analyzer = analyzer
                     st.session_state.current_step = 3
 
                     metadata = analysis_results["metadata"]
@@ -357,8 +371,236 @@ def explore_section():
                         st.metric("Features", f"{metadata['n_numeric']} num, {metadata['n_categorical']} cat")
                         st.metric("Quality Score", f"{metadata.get('data_quality_score', 0):.0f}/100")
 
+                    # Generate visualizations if requested
+                    if analysis_type == "Generate Visualizations":
+                        st.subheader("📊 Generated Visualizations")
+                        
+                        # Chart type selection
+                        chart_type = st.selectbox(
+                            "Select visualization type:",
+                            ["auto", "distribution", "correlation", "missing", "outliers"]
+                        )
+                        
+                        if st.button("📈 Generate Charts"):
+                            with st.spinner("Generating visualizations..."):
+                                try:
+                                    visualizations = analyzer.generate_visualizations(chart_type)
+                                    
+                                    # Display charts
+                                    for chart_name, fig in visualizations.items():
+                                        if isinstance(fig, dict) and "charts" in visualizations:
+                                            # Handle multiple charts
+                                            for sub_chart_name, sub_fig in fig.items():
+                                                st.plotly_chart(sub_fig, use_container_width=True, key=f"{chart_name}_{sub_chart_name}")
+                                        else:
+                                            st.plotly_chart(fig, use_container_width=True, key=chart_name)
+                                    
+                                    st.success("✅ Visualizations generated!")
+                                    
+                                except Exception as e:
+                                    st.error(f"Visualization failed: {str(e)}")
+
+                    # Chat with data if requested
+                    elif analysis_type == "Chat with Data":
+                        st.subheader("💬 Chat with Your Data")
+                        
+                        # Chat input
+                        user_question = st.text_input("Ask anything about your data:")
+                        
+                        if st.button("🤖 Ask AI") and user_question:
+                            with st.spinner("AI is analyzing..."):
+                                try:
+                                    chat_response = analyzer.chat_with_data(user_question)
+                                    
+                                    # Display response
+                                    st.markdown(f"**AI Response:** {chat_response['text']}")
+                                    
+                                    # Show confidence
+                                    confidence = chat_response.get('confidence', 'medium')
+                                    if confidence == 'high':
+                                        st.success("✅ High confidence response")
+                                    elif confidence == 'medium':
+                                        st.info("ℹ️ Medium confidence response")
+                                    else:
+                                        st.warning("⚠️ Low confidence response")
+                                    
+                                    # Show suggested visualization if available
+                                    if chat_response.get('chart_suggestion'):
+                                        st.info("📊 Suggested visualization available")
+                                        
+                                except Exception as e:
+                                    st.error(f"Chat failed: {str(e)}")
+
                 except Exception as e:
                     st.error(f"Analysis failed: {str(e)}")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+def visualize_section():
+    """Dedicated visualization section with comprehensive chart generation"""
+    st.markdown('<div class="tab-content">', unsafe_allow_html=True)
+
+    if st.session_state.uploaded_data is None:
+        st.info("📊 Please upload a dataset first.")
+        return
+
+    st.subheader("📈 Advanced Data Visualization")
+
+    # Use cleaned data if available
+    data_to_use = st.session_state.cleaned_data if st.session_state.cleaned_data is not None else st.session_state.uploaded_data
+
+    # Initialize analyzer if needed
+    if not hasattr(st.session_state, 'data_analyzer') or st.session_state.data_analyzer is None:
+        with st.spinner("🧠 Initializing data analyzer..."):
+            st.session_state.data_analyzer = DataAnalyzer()
+            st.session_state.data_analyzer.analyze_dataset(data_to_use)
+
+    analyzer = st.session_state.data_analyzer
+
+    # Visualization options
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        st.subheader("🎨 Chart Types")
+        
+        # Chart type selection
+        chart_type = st.selectbox(
+            "Select visualization type:",
+            ["auto", "distribution", "correlation", "missing", "outliers", "summary"]
+        )
+
+        # Column selection for specific charts
+        if chart_type in ["distribution", "outliers"]:
+            available_columns = data_to_use.columns.tolist()
+            selected_columns = st.multiselect(
+                "Select columns to visualize:",
+                available_columns,
+                default=available_columns[:3] if len(available_columns) >= 3 else available_columns
+            )
+        else:
+            selected_columns = None
+
+        # Generate button
+        if st.button("📊 Generate Visualizations", type="primary", use_container_width=True):
+            with st.spinner("Creating beautiful visualizations..."):
+                try:
+                    if selected_columns:
+                        # Filter data for selected columns
+                        filtered_data = data_to_use[selected_columns].copy()
+                        temp_analyzer = DataAnalyzer()
+                        temp_analyzer.analyze_dataset(filtered_data)
+                        visualizations = temp_analyzer.generate_visualizations(chart_type, selected_columns)
+                    else:
+                        visualizations = analyzer.generate_visualizations(chart_type)
+
+                    # Store visualizations in session state
+                    st.session_state.current_visualizations = visualizations
+                    st.success("✅ Visualizations generated successfully!")
+
+                except Exception as e:
+                    st.error(f"Visualization failed: {str(e)}")
+
+    with col2:
+        st.subheader("📋 Quick Actions")
+        
+        # Quick visualization buttons
+        if st.button("📊 Distribution Analysis", use_container_width=True):
+            with st.spinner("Generating distribution plots..."):
+                try:
+                    visualizations = analyzer.generate_visualizations("distribution")
+                    st.session_state.current_visualizations = visualizations
+                    st.success("✅ Distribution plots ready!")
+                except Exception as e:
+                    st.error(f"Failed: {str(e)}")
+
+        if st.button("🔗 Correlation Analysis", use_container_width=True):
+            with st.spinner("Generating correlation matrix..."):
+                try:
+                    visualizations = analyzer.generate_visualizations("correlation")
+                    st.session_state.current_visualizations = visualizations
+                    st.success("✅ Correlation analysis ready!")
+                except Exception as e:
+                    st.error(f"Failed: {str(e)}")
+
+        if st.button("❓ Missing Data Analysis", use_container_width=True):
+            with st.spinner("Analyzing missing data..."):
+                try:
+                    visualizations = analyzer.generate_visualizations("missing")
+                    st.session_state.current_visualizations = visualizations
+                    st.success("✅ Missing data analysis ready!")
+                except Exception as e:
+                    st.error(f"Failed: {str(e)}")
+
+        if st.button("📈 Summary Dashboard", use_container_width=True):
+            with st.spinner("Creating summary dashboard..."):
+                try:
+                    visualizations = analyzer.generate_visualizations("summary")
+                    st.session_state.current_visualizations = visualizations
+                    st.success("✅ Summary dashboard ready!")
+                except Exception as e:
+                    st.error(f"Failed: {str(e)}")
+
+    # Display visualizations
+    if hasattr(st.session_state, 'current_visualizations') and st.session_state.current_visualizations:
+        st.subheader("📊 Generated Visualizations")
+        
+        visualizations = st.session_state.current_visualizations
+        
+        # Display each visualization
+        for chart_name, fig in visualizations.items():
+            try:
+                if isinstance(fig, dict):
+                    # Handle nested visualizations
+                    for sub_name, sub_fig in fig.items():
+                        st.markdown(f"**{sub_name.replace('_', ' ').title()}**")
+                        st.plotly_chart(sub_fig, use_container_width=True, key=f"viz_{chart_name}_{sub_name}")
+                        st.markdown("---")
+                else:
+                    # Single visualization
+                    st.markdown(f"**{chart_name.replace('_', ' ').title()}**")
+                    st.plotly_chart(fig, use_container_width=True, key=f"viz_{chart_name}")
+                    st.markdown("---")
+            except Exception as e:
+                st.warning(f"Could not display {chart_name}: {str(e)}")
+
+    # AI-powered visualization suggestions
+    st.subheader("🤖 AI Visualization Suggestions")
+    
+    user_query = st.text_input("Describe what you want to visualize:", 
+                              placeholder="e.g., 'Show me the relationship between age and income'")
+    
+    if st.button("🤖 Get AI Suggestions") and user_query:
+        with st.spinner("AI is analyzing your request..."):
+            try:
+                response = analyzer.chat_with_data(f"Suggest visualizations for: {user_query}")
+                
+                st.markdown(f"**AI Suggestion:** {response['text']}")
+                
+                if response.get('chart_suggestion'):
+                    suggestion = response['chart_suggestion']
+                    st.info(f"📊 Suggested chart: {suggestion.get('type', 'chart')} with {suggestion.get('x', 'x-axis')} and {suggestion.get('y', 'y-axis')}")
+                    
+                    # Auto-generate the suggested chart
+                    if st.button("🎨 Generate Suggested Chart"):
+                        try:
+                            chart_data = analyzer._create_suggested_visualization(suggestion)
+                            if chart_data and chart_data is not None:
+                                if chart_data["type"] == "histogram":
+                                    fig = px.histogram(x=chart_data["data"], title=chart_data["title"])
+                                    st.plotly_chart(fig, use_container_width=True)
+                                elif chart_data["type"] == "scatter":
+                                    fig = px.scatter(x=chart_data["x_data"], y=chart_data["y_data"], title=chart_data["title"])
+                                    st.plotly_chart(fig, use_container_width=True)
+                                elif chart_data["type"] == "bar":
+                                    fig = px.bar(x=chart_data["categories"], y=chart_data["values"], title=chart_data["title"])
+                                    st.plotly_chart(fig, use_container_width=True)
+                            else:
+                                st.warning("No chart data available for this suggestion.")
+                        except Exception as e:
+                            st.error(f"Failed to generate suggested chart: {str(e)}")
+                
+            except Exception as e:
+                st.error(f"AI suggestion failed: {str(e)}")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -464,7 +706,7 @@ def automl_section():
     st.markdown('</div>', unsafe_allow_html=True)
 
 def chat_section():
-    """Simplified chat interface"""
+    """Enhanced chat interface with visualization capabilities"""
     st.markdown('<div class="tab-content">', unsafe_allow_html=True)
 
     if st.session_state.uploaded_data is None:
@@ -473,11 +715,12 @@ def chat_section():
 
     st.subheader("💬 Chat with Your Data")
 
-    # Initialize chat agent if needed
-    if st.session_state.chat_agent is None:
+    # Initialize data analyzer if needed
+    if not hasattr(st.session_state, 'data_analyzer') or st.session_state.data_analyzer is None:
         data_to_use = st.session_state.cleaned_data if st.session_state.cleaned_data is not None else st.session_state.uploaded_data
-        with st.spinner("🧠 Initializing chat..."):
-            st.session_state.chat_agent = create_chat_agent(data_to_use)
+        with st.spinner("🧠 Initializing data analyzer..."):
+            st.session_state.data_analyzer = DataAnalyzer()
+            st.session_state.data_analyzer.analyze_dataset(data_to_use)
         st.session_state.current_step = 5
 
     # Chat container
@@ -489,6 +732,23 @@ def chat_section():
             st.markdown(f"**You:** {chat['message']}")
         else:
             st.markdown(f"**AI:** {chat['message']}")
+            
+            # Display visualization if available
+            if "chart_data" in chat and chat["chart_data"] is not None:
+                chart_data = chat["chart_data"]
+                try:
+                    if chart_data["type"] == "histogram":
+                        fig = px.histogram(x=chart_data["data"], title=chart_data["title"])
+                        st.plotly_chart(fig, use_container_width=True)
+                    elif chart_data["type"] == "scatter":
+                        fig = px.scatter(x=chart_data["x_data"], y=chart_data["y_data"], title=chart_data["title"])
+                        st.plotly_chart(fig, use_container_width=True)
+                    elif chart_data["type"] == "bar":
+                        fig = px.bar(x=chart_data["categories"], y=chart_data["values"], title=chart_data["title"])
+                        st.plotly_chart(fig, use_container_width=True)
+                except Exception as e:
+                    st.warning(f"Could not display chart: {str(e)}")
+            
         st.markdown("---")
 
     st.markdown('</div>', unsafe_allow_html=True)
@@ -503,15 +763,19 @@ def chat_section():
         # Get AI response
         with st.spinner("🧠 Thinking..."):
             try:
-                response = st.session_state.chat_agent.chat(user_message)
-                st.session_state.chat_history.append({"role": "assistant", "message": response["text"]})
+                response = st.session_state.data_analyzer.chat_with_data(user_message)
+                st.session_state.chat_history.append({
+                    "role": "assistant", 
+                    "message": response["text"],
+                    "chart_data": response.get("chart_data")
+                })
                 st.rerun()
             except Exception as e:
                 error_msg = f"Sorry, I encountered an error: {str(e)}"
                 st.session_state.chat_history.append({"role": "assistant", "message": error_msg})
                 st.rerun()
 
-    # Quick questions
+    # Quick questions with visualization suggestions
     st.subheader("🚀 Try These Questions")
 
     col1, col2, col3 = st.columns(3)
@@ -522,14 +786,49 @@ def chat_section():
             st.rerun()
 
     with col2:
-        if st.button("🔍 Find patterns", use_container_width=True):
-            st.session_state.chat_history.append({"role": "user", "message": "What patterns do you see?"})
+        if st.button("📈 Show distributions", use_container_width=True):
+            st.session_state.chat_history.append({"role": "user", "message": "Show me the distribution of numerical columns"})
             st.rerun()
 
     with col3:
-        if st.button("💡 Get insights", use_container_width=True):
-            st.session_state.chat_history.append({"role": "user", "message": "What insights can you share?"})
+        if st.button("🔍 Find correlations", use_container_width=True):
+            st.session_state.chat_history.append({"role": "user", "message": "What are the strongest correlations in the data?"})
             st.rerun()
+
+    # Advanced visualization options
+    st.subheader("📊 Quick Visualizations")
+    
+    col_a, col_b, col_c = st.columns(3)
+    
+    with col_a:
+        if st.button("📊 Distribution Plots", use_container_width=True):
+            with st.spinner("Generating distribution plots..."):
+                try:
+                    visualizations = st.session_state.data_analyzer.generate_visualizations("distribution")
+                    for chart_name, fig in visualizations.items():
+                        st.plotly_chart(fig, use_container_width=True, key=f"quick_{chart_name}")
+                except Exception as e:
+                    st.error(f"Failed to generate plots: {str(e)}")
+    
+    with col_b:
+        if st.button("🔗 Correlation Matrix", use_container_width=True):
+            with st.spinner("Generating correlation matrix..."):
+                try:
+                    visualizations = st.session_state.data_analyzer.generate_visualizations("correlation")
+                    for chart_name, fig in visualizations.items():
+                        st.plotly_chart(fig, use_container_width=True, key=f"quick_{chart_name}")
+                except Exception as e:
+                    st.error(f"Failed to generate correlation: {str(e)}")
+    
+    with col_c:
+        if st.button("❓ Missing Data", use_container_width=True):
+            with st.spinner("Analyzing missing data..."):
+                try:
+                    visualizations = st.session_state.data_analyzer.generate_visualizations("missing")
+                    for chart_name, fig in visualizations.items():
+                        st.plotly_chart(fig, use_container_width=True, key=f"quick_{chart_name}")
+                except Exception as e:
+                    st.error(f"Failed to analyze missing data: {str(e)}")
 
     # Clear chat
     if st.button("🗑️ Clear Chat"):
