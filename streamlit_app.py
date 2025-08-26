@@ -18,8 +18,8 @@ import uuid
 from main import AutoMLSystemV2, run_automl_pipeline_v2, quick_chat_with_data
 from components.utils import validate_dataframe, ModelPredictor
 from components.model_advisor import get_gemini_advisor_info
-from components.data_cleaner import create_data_cleaning_agent
-from components.chat_agent import create_chat_agent
+from components.data_cleaner_backup import create_data_cleaning_agent
+from components.chat_agent_backup import create_chat_agent
 from config.settings import (
     STREAMLIT_PAGE_TITLE, STREAMLIT_PAGE_ICON, STREAMLIT_LAYOUT,
     MAX_FILE_SIZE_MB, DEFAULT_TIME_LIMIT_MINUTES,

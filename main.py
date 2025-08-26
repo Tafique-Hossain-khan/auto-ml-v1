@@ -14,7 +14,7 @@ from components.data_analyzer import analyze_uploaded_data
 from components.model_advisor import get_model_suggestions, get_gemini_advisor_info
 from components.trainer import train_automl_models
 from components.data_cleaner import DataCleaningAgent, create_data_cleaning_agent
-from components.chat_agent import ChatWithDataAgent, create_chat_agent, quick_data_summary
+from components.chat_agent import ChatWithDataAgent, create_chat_agent
 from components.utils import create_directories, validate_dataframe, ModelPredictor
 from config.settings import DEFAULT_TIME_LIMIT_MINUTES
 

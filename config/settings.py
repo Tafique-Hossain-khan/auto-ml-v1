@@ -29,7 +29,7 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 # Default LLM Settings - All using Gemini Flash for free tier
 DEFAULT_LLM_PROVIDER = "gemini"
 DEFAULT_GEMINI_MODEL = "gemini-1.5-flash"  # Free tier optimized
-ALTERNATIVE_GEMINI_MODEL = "gemini-1.5-pro"  # Backup
+ALTERNATIVE_GEMINI_MODEL = "gemini-1.5-flash"  # Backup
 DEFAULT_OPENAI_MODEL = "gpt-3.5-turbo"
 ANTHROPIC_MODEL = "claude-3-haiku-20240307"
 

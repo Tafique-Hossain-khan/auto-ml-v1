@@ -1,7 +1,8 @@
 """
-Data Cleaning Agent for AutoML System v2 - Fixed JSON Serialization
+Data Cleaning Agent for AutoML System v2 - FIXED with Real AI Integration
 Uses GOOGLE_API_KEY2 for AI-powered data cleaning suggestions
 """
+
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Any, Tuple, Optional
@@ -37,7 +38,7 @@ def safe_json_serialize(obj: Any) -> Any:
         return [safe_json_serialize(item) for item in obj]
     elif isinstance(obj, dict):
         return {key: safe_json_serialize(value) for key, value in obj.items()}
-    elif hasattr(obj, 'item'):  # NumPy scalars
+    elif hasattr(obj, 'item'): # NumPy scalars
         return obj.item()
     else:
         return obj
@@ -60,7 +61,6 @@ def save_to_cache(key: str, data: Any, cache_dir: str = "cache") -> None:
 
     # Convert data to JSON-safe format
     safe_data = safe_json_serialize(data)
-
     cache_data = {
         "data": safe_data,
         "timestamp": datetime.now().isoformat(),
@@ -77,7 +77,6 @@ def load_from_cache(key: str, cache_dir: str = "cache", max_age_hours: int = 24)
     from datetime import datetime, timedelta
 
     cache_file = Path(cache_dir) / f"{key}.json"
-
     if not cache_file.exists():
         return None
 
@@ -95,7 +94,7 @@ def load_from_cache(key: str, cache_dir: str = "cache", max_age_hours: int = 24)
         return None
 
 class DataCleaningAgent:
-    """AI-powered data cleaning agent using Gemini - Fixed JSON serialization"""
+    """AI-powered data cleaning agent using Gemini - FIXED with Real AI Integration"""
 
     def __init__(self, use_cache: bool = True):
         self.use_cache = use_cache
@@ -114,7 +113,7 @@ class DataCleaningAgent:
                     max_output_tokens=DATA_CLEANING_CONFIG["max_output_tokens"]
                 )
                 self.active_provider = "gemini"
-                print("✅ Data Cleaning Agent: Gemini initialized")
+                print("✅ Data Cleaning Agent: Gemini initialized for AI-powered suggestions")
             except Exception as e:
                 print(f"⚠️ Gemini initialization failed: {e}")
                 self.llm = None
@@ -122,28 +121,27 @@ class DataCleaningAgent:
 
     def analyze_data_quality(self, df: pd.DataFrame) -> Dict[str, Any]:
         """Analyze data quality and return comprehensive assessment - Fixed JSON serialization"""
-
         # Basic statistics
         n_rows, n_cols = df.shape
         total_cells = n_rows * n_cols
 
         # Missing values analysis - Convert to native Python types
         missing_counts = df.isnull().sum()
-        total_missing = int(missing_counts.sum())  # Convert to int
-        missing_percentage = float((total_missing / total_cells) * 100)  # Convert to float
+        total_missing = int(missing_counts.sum()) # Convert to int
+        missing_percentage = float((total_missing / total_cells) * 100) # Convert to float
 
         missing_by_column = {}
         for col in df.columns:
-            missing_count = int(missing_counts[col])  # Convert to int
+            missing_count = int(missing_counts[col]) # Convert to int
             if missing_count > 0:
                 missing_by_column[col] = {
                     "count": missing_count,
-                    "percentage": round(float((missing_count / n_rows) * 100), 2)  # Convert to float
+                    "percentage": round(float((missing_count / n_rows) * 100), 2) # Convert to float
                 }
 
         # Duplicate analysis - Convert to native Python types
-        duplicate_count = int(df.duplicated().sum())  # Convert to int
-        duplicate_percentage = float((duplicate_count / n_rows) * 100)  # Convert to float
+        duplicate_count = int(df.duplicated().sum()) # Convert to int
+        duplicate_percentage = float((duplicate_count / n_rows) * 100) # Convert to float
 
         # Calculate overall quality score
         quality_score = 100.0
@@ -171,13 +169,12 @@ class DataCleaningAgent:
         }
 
     def suggest_cleaning_operations(self, df: pd.DataFrame, quality_analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Get AI-powered cleaning suggestions - Fixed caching"""
-
+        """Get AI-powered cleaning suggestions - FIXED to actually use Gemini AI"""
         # Create cache key with safe data
         cache_data = {
-            "shape": [int(df.shape[0]), int(df.shape[1])],  # Convert to native int
-            "dtypes": {col: str(dtype) for col, dtype in df.dtypes.to_dict().items()},  # Convert to str
-            "quality_score": float(quality_analysis["quality_score"]),  # Ensure float
+            "shape": [int(df.shape[0]), int(df.shape[1])], # Convert to native int
+            "dtypes": {col: str(dtype) for col, dtype in df.dtypes.to_dict().items()}, # Convert to str
+            "quality_score": float(quality_analysis["quality_score"]), # Ensure float
             "provider": self.active_provider
         }
 
@@ -190,7 +187,21 @@ class DataCleaningAgent:
                 print("📋 Using cached cleaning suggestions")
                 return cached_suggestions
 
-        # Generate suggestions (simplified for clean UI)
+        # FIXED: Now actually use AI when available!
+        if self.active_provider == "gemini" and self.llm:
+            print("🤖 Generating AI-powered cleaning suggestions with Gemini...")
+            try:
+                suggestions = self._get_ai_powered_suggestions(df, quality_analysis)
+                if suggestions:  # If AI suggestions worked, use them
+                    print(f"✅ Generated {len(suggestions)} AI-powered suggestions")
+                    if self.use_cache:
+                        save_to_cache(cache_key, suggestions)
+                    return suggestions
+            except Exception as e:
+                print(f"⚠️ AI suggestions failed ({str(e)}), falling back to rule-based")
+
+        # Fallback to rule-based suggestions
+        print("📋 Generating rule-based cleaning suggestions...")
         suggestions = self._get_rule_based_suggestions(df, quality_analysis)
 
         # Cache results - data is already JSON-safe
@@ -199,9 +210,103 @@ class DataCleaningAgent:
 
         return suggestions
 
+    def _get_ai_powered_suggestions(self, df: pd.DataFrame, quality_analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """NEW METHOD: Get AI-powered cleaning suggestions using Gemini"""
+        try:
+            # Prepare concise dataset summary for AI (token-efficient)
+            dataset_summary = self._create_dataset_summary(df, quality_analysis)
+
+            # Create AI prompt (optimized for free tier)
+            prompt = f"""As a data cleaning expert, analyze this dataset and suggest specific cleaning operations.
+
+Dataset Summary:
+- Shape: {df.shape[0]} rows × {df.shape[1]} columns
+- Quality Score: {quality_analysis['quality_score']:.1f}/100
+- Missing Values: {quality_analysis['missing_values']['total_missing_percentage']:.1f}%
+- Duplicates: {quality_analysis['duplicates']['percentage']:.1f}%
+- Column Types: {dataset_summary['column_types']}
+
+Respond with ONLY a JSON list of cleaning operations in this exact format:
+[
+  {{
+    "operation": "handle_missing_values",
+    "description": "Brief description",
+    "rationale": "Why this is needed",
+    "priority": "high",
+    "parameters": {{"strategy": "median"}}
+  }}
+]
+
+Focus on the most critical issues. Maximum 3 suggestions."""
+
+            # Call Gemini AI (with minimal token usage)
+            messages = [
+                SystemMessage(content="You are a data cleaning expert. Provide only JSON responses."),
+                HumanMessage(content=prompt)
+            ]
+
+            response = self.llm.invoke(messages)
+
+            # Parse AI response
+            ai_suggestions = self._parse_ai_response(response.content)
+            return ai_suggestions
+
+        except Exception as e:
+            print(f"❌ AI suggestion generation failed: {e}")
+            return []
+
+    def _create_dataset_summary(self, df: pd.DataFrame, quality_analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a concise dataset summary for AI analysis (token-efficient)"""
+        # Get column type counts
+        numeric_cols = len(df.select_dtypes(include=[np.number]).columns)
+        categorical_cols = len(df.select_dtypes(include=['object', 'category']).columns)
+        datetime_cols = len(df.select_dtypes(include=['datetime']).columns)
+
+        return {
+            "column_types": f"{numeric_cols} numeric, {categorical_cols} categorical, {datetime_cols} datetime",
+            "memory_usage": f"{df.memory_usage(deep=True).sum() / (1024*1024):.1f}MB"
+        }
+
+    def _parse_ai_response(self, response_content: str) -> List[Dict[str, Any]]:
+        """Parse AI response and extract cleaning suggestions"""
+        try:
+            # Clean the response (remove markdown code blocks if present)
+            content = response_content.strip()
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+
+            # Parse JSON
+            suggestions = json.loads(content)
+
+            # Validate and ensure all required fields
+            validated_suggestions = []
+            for suggestion in suggestions:
+                if isinstance(suggestion, dict) and "operation" in suggestion:
+                    # Ensure all required fields exist
+                    validated_suggestion = {
+                        "operation": suggestion.get("operation", "unknown"),
+                        "description": suggestion.get("description", "AI-suggested operation"),
+                        "rationale": suggestion.get("rationale", "Recommended by AI analysis"),
+                        "priority": suggestion.get("priority", "medium"),
+                        "parameters": suggestion.get("parameters", {}),
+                        "apply": True
+                    }
+                    validated_suggestions.append(validated_suggestion)
+
+            return validated_suggestions
+
+        except json.JSONDecodeError as e:
+            print(f"⚠️ Failed to parse AI response as JSON: {e}")
+            return []
+        except Exception as e:
+            print(f"⚠️ Error processing AI response: {e}")
+            return []
+
     def _get_rule_based_suggestions(self, df: pd.DataFrame, quality_analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Generate rule-based cleaning suggestions - All native Python types"""
-
         suggestions = []
 
         # Missing values
@@ -229,12 +334,11 @@ class DataCleaningAgent:
                 "apply": True
             })
 
-        print(f"📋 Generated {len(suggestions)} cleaning suggestions")
+        print(f"📋 Generated {len(suggestions)} rule-based cleaning suggestions")
         return suggestions
 
     def apply_cleaning_operations(self, df: pd.DataFrame, operations: List[Dict[str, Any]]) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         """Apply cleaning operations to dataset - Fixed stats conversion"""
-
         cleaned_df = df.copy()
         before_stats = self._get_data_stats(df)
 

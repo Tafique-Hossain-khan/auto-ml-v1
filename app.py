@@ -94,6 +94,7 @@ st.markdown("""
 def initialize_session_state():
     """Initialize Streamlit session state variables"""
     defaults = {
+        # Original variables
         'automl_results': None,
         'uploaded_data': None,
         'cleaned_data': None,
@@ -105,7 +106,17 @@ def initialize_session_state():
         'data_analyzer': None,
         'current_visualizations': None,
         'current_step': 1,
-        'analysis_results': None
+        'analysis_results': None,
+
+        # NEW: Data cleaning workflow variables (FIX for AttributeError)
+        'cleaning_analyzed': False,
+        'cleaning_quality_analysis': None,
+        'cleaning_report': None,
+
+        # NEW: AI visualization workflow variables (FIX for nested buttons)
+        'ai_suggestion_response': None,
+        'ai_chart_generated': False,
+        'generate_viz_requested': False,
     }
 
     for key, default_value in defaults.items():
@@ -119,6 +130,8 @@ def get_unique_chart_key(base_name):
 
 def main():
     """Main application"""
+    st.cache_data.clear()
+    st.cache_resource.clear()
     initialize_session_state()
 
     # Header
@@ -216,7 +229,9 @@ def display_main_navigation():
         automl_section()
 
     with tab5:
+        print("➡️Getting into the chat section")
         chat_section()
+        
 
     with tab6:
         results_section()
@@ -291,35 +306,73 @@ def explore_section():
 
     with col1:
         st.subheader("🧹 Smart Data Cleaning")
+        if not st.session_state.cleaning_analyzed:
+            if st.button("🚀 Analyze & Clean Data", type="primary"):
+                with st.spinner("🧠 AI is analyzing your data..."):
+                    try:
+                        cleaning_agent = create_data_cleaning_agent()
+                        quality_analysis = cleaning_agent.analyze_data_quality(df)
+                        suggestions = cleaning_agent.suggest_cleaning_operations(df, quality_analysis)
 
-        if st.button("🚀 Analyze & Clean Data", type="primary"):
-            with st.spinner("🧠 AI is analyzing your data..."):
-                try:
-                    cleaning_agent = create_data_cleaning_agent()
-                    quality_analysis = cleaning_agent.analyze_data_quality(df)
-                    suggestions = cleaning_agent.suggest_cleaning_operations(df, quality_analysis)
 
-                    st.session_state.cleaning_suggestions = suggestions
-
-                    # Show quality score
-                    score = quality_analysis['quality_score']
-                    if score >= 80:
-                        st.success(f"✅ Data Quality: {score:.0f}/100 - Excellent!")
-                    elif score >= 60:
-                        st.warning(f"⚠️ Data Quality: {score:.0f}/100 - Good with improvements")
-                    else:
-                        st.error(f"❌ Data Quality: {score:.0f}/100 - Needs attention")
-
-                    # Apply high-priority operations automatically
-                    high_priority = [s for s in suggestions if s.get('priority') == 'high']
-                    if high_priority and st.button("✨ Apply AI Recommendations"):
-                        cleaned_df, report = cleaning_agent.apply_cleaning_operations(df, high_priority)
-                        st.session_state.cleaned_data = cleaned_df
-                        st.success(f"🎉 Applied {len(high_priority)} cleaning operations!")
+                        # Store results in session state
+                        st.session_state.cleaning_suggestions = suggestions
+                        st.session_state.cleaning_quality_analysis = quality_analysis
+                        st.session_state.cleaning_analyzed = True
                         st.rerun()
 
-                except Exception as e:
-                    st.error(f"Cleaning failed: {str(e)}")
+                    except Exception as e:
+                        st.error(f"Cleaning failed: {str(e)}")
+
+        # Show cleaning status
+        if st.session_state.cleaning_analyzed and st.session_state.cleaning_quality_analysis:
+            quality_analysis = st.session_state.cleaning_quality_analysis
+            suggestions = st.session_state.cleaning_suggestions
+
+            # Show quality score
+            score = quality_analysis['quality_score']
+            if score >= 80:
+                st.success(f"✅ Data Quality: {score:.0f}/100 - Excellent!")
+            elif score >= 60:
+                st.warning(f"⚠️ Data Quality: {score:.0f}/100 - Good with improvements")
+            else:
+                st.error(f"❌ Data Quality: {score:.0f}/100 - Needs attention")
+
+            # Show suggestions summary
+            if suggestions:
+                st.info(f"Found {len(suggestions)} cleaning suggestions")
+
+                # Show detailed suggestions
+                with st.expander("📋 View Cleaning Suggestions"):
+                    for i, suggestion in enumerate(suggestions):
+                        priority_emoji = "🔴" if suggestion.get('priority') == 'high' else "🟡"
+                        st.write(f"{priority_emoji} **{suggestion['operation']}**: {suggestion['description']}")
+                        st.write(f"   *Rationale: {suggestion['rationale']}*")
+
+            # Apply high-priority operations
+            high_priority = [s for s in suggestions if s.get('priority') == 'high'] if suggestions else []
+
+            if high_priority and st.session_state.cleaned_data is None:
+                if st.button("✨ Apply AI Recommendations", type="secondary"):
+                    with st.spinner("🧹 Applying cleaning operations..."):
+                        try:
+                            cleaning_agent = create_data_cleaning_agent()
+                            cleaned_df, report = cleaning_agent.apply_cleaning_operations(df, high_priority)
+                            st.session_state.cleaned_data = cleaned_df
+                            st.session_state.cleaning_report = report
+                            st.success(f"🎉 Applied {len(high_priority)} cleaning operations!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Cleaning application failed: {str(e)}")
+
+            # Reset button to start over
+            if st.button("🔄 Reset Analysis", type="secondary"):
+                st.session_state.cleaning_analyzed = False
+                st.session_state.cleaning_quality_analysis = None
+                st.session_state.cleaning_suggestions = None
+                if 'cleaning_report' in st.session_state:
+                    del st.session_state.cleaning_report
+                st.rerun()
 
         # Show cleaning status
         if st.session_state.cleaned_data is not None:
@@ -327,6 +380,22 @@ def explore_section():
             original_shape = st.session_state.uploaded_data.shape
             cleaned_shape = st.session_state.cleaned_data.shape
             st.info(f"Shape: {original_shape} → {cleaned_shape}")
+
+            # Show cleaning report if available
+            if 'cleaning_report' in st.session_state and st.session_state.cleaning_report:
+                report = st.session_state.cleaning_report
+                changes = report.get('changes_summary', {})
+
+                if changes:
+                    with st.expander("📊 Cleaning Report"):
+                        if changes.get('rows_removed', 0) > 0:
+                            st.write(f"• Rows removed: {changes['rows_removed']}")
+                        if changes.get('missing_values_handled', 0) > 0:
+                            st.write(f"• Missing values handled: {changes['missing_values_handled']}")
+                        if changes.get('duplicates_removed', 0) > 0:
+                            st.write(f"• Duplicates removed: {changes['duplicates_removed']}")
+                        if changes.get('memory_reduction_mb', 0) > 0:
+                            st.write(f"• Memory reduced: {changes['memory_reduction_mb']:.1f} MB")
 
     with col2:
         st.subheader("🔍 Quick Analysis & Visualization")
@@ -435,7 +504,161 @@ def explore_section():
                     st.error(f"Analysis failed: {str(e)}")
 
     st.markdown('</div>', unsafe_allow_html=True)
+def chat_section():
+    """Chat with Data section - MISSING INTEGRATION ADDED 🟥🟥🟥
+    """
+    try:
+        # st.markdown('<div class="tab-content">', unsafe_allow_html=True)
+        st.write("## Chat Section Loaded")
+        print("➡️inside the chat function")
+    except Exception as e:
+        # this will force any error to your console so you can see it
+        import traceback
+        print("❌ Exception in chat_section():", e)
+        print(traceback.format_exc())
+        # re‐raise so Streamlit shows an error in the UI
+        raise
 
+    if st.session_state.uploaded_data is None:
+        st.info("📊 Please upload a dataset first to start chatting with your data!")
+        return
+    
+    df = st.session_state.uploaded_data
+    print(df.head(3))
+    
+    # Initialize chat agent if not exists - THIS WAS MISSING!
+    print("➡️ Before initializing the chat agent")
+    if st.session_state.chat_agent is None:
+        try:
+            with st.spinner("🤖 Initializing AI Chat Agent..."):
+                print("➡️ creating the chat agent")
+                st.session_state.chat_agent = create_chat_agent(df)
+                st.success("✅ Chat Agent Ready! Ask me anything about your data.")
+        except Exception as e:
+            st.error(f"❌ Failed to initialize chat agent: {str(e)}")
+            return
+    
+    # Chat interface header
+    st.subheader("💬 Chat with Your Data")
+    st.markdown("Ask me anything about your dataset! I can analyze, visualize, and provide insights.")
+    
+    ######### Quick action buttons
+    # st.markdown("**Quick Questions:**")
+    # col1, col2, col3 = st.columns(3)
+    
+    # with col1:
+    #     if st.button("📊 Summarize dataset", use_container_width=True):
+    #         st.session_state.chat_history.append({
+    #             "role": "user", 
+    #             "message": "Summarize this dataset"
+    #         })
+    #         st.rerun()
+    
+    # with col2:
+    #     if st.button("📈 Show distributions", use_container_width=True):
+    #         st.session_state.chat_history.append({
+    #             "role": "user", 
+    #             "message": "Show me the distribution of numerical columns"
+    #         })
+    #         st.rerun()
+    
+    # with col3:
+    #     if st.button("🔍 Find correlations", use_container_width=True):
+    #         st.session_state.chat_history.append({
+    #             "role": "user", 
+    #             "message": "What are the strongest correlations in the data?"
+    #         })
+    #         st.rerun()
+    
+    st.markdown("---")
+    
+    # Chat input
+    user_input = st.text_input(
+        "💭 Ask me anything about your data:",
+        placeholder="e.g., 'Find outliers', 'Create a scatter plot', 'What insights can you find?'",
+        key="chat_input"
+    )
+    
+    # Send message button
+    col_send, col_clear = st.columns([3, 1])
+    with col_send:
+        send_message = st.button("🚀 Send Message", type="primary", use_container_width=True)
+    with col_clear:
+        if st.button("🗑️ Clear Chat", use_container_width=True):
+            st.session_state.chat_history = []
+            st.rerun()
+    
+    # Process new message - THIS HANDLES THE ACTUAL CHAT!
+    if send_message and user_input.strip():
+        # Add user message to history
+        st.session_state.chat_history.append({
+            "role": "user",
+            "message": user_input
+        })
+        
+        # Get AI response - THIS IS WHERE THE MAGIC HAPPENS!
+        with st.spinner("🤖 AI is analyzing..."):
+            try:
+                response = st.session_state.chat_agent.chat(user_input)
+                
+                # Add AI response to history
+                st.session_state.chat_history.append({
+                    "role": "assistant",
+                    "message": response.get("text", "I couldn't process your request."),
+                    "chart": response.get("chart"),  # CHARTS ARE DISPLAYED HERE!
+                    "code": response.get("code")
+                })
+                
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"❌ Chat failed: {str(e)}")
+                st.session_state.chat_history.append({
+                    "role": "assistant",
+                    "message": f"I encountered an error: {str(e)}. Please try rephrasing your question."
+                })
+    
+    # Display chat history with charts
+    if st.session_state.chat_history:
+        st.markdown("### 💬 Chat History")
+        
+        for i, message in enumerate(reversed(st.session_state.chat_history[-10:])):
+            if message["role"] == "user":
+                st.markdown(f"""
+                <div style="background-color: #e3f2fd; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                    <strong>🙋‍♂️ You:</strong> {message["message"]}
+                </div>
+                """, unsafe_allow_html=True)
+                
+            else:  # assistant
+                st.markdown(f"""
+                <div style="background-color: #f3e5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
+                    <strong>🤖 AI Assistant:</strong>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Display text response
+                st.markdown(message["message"])
+                
+                # Display chart if available - CHARTS DISPLAYED HERE!
+                if message.get("chart"):
+                    try:
+                        st.plotly_chart(
+                            message["chart"], 
+                            use_container_width=True, 
+                            key=f"chat_chart_{i}"
+                        )
+                    except Exception as e:
+                        st.error(f"Could not display chart: {str(e)}")
+                
+                # Display code if available
+                if message.get("code"):
+                    st.code(message["code"], language="python")
+    
+    else:
+        st.info("👋 Start a conversation by asking a question about your data!")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 def visualize_section():
     """Dedicated visualization section with comprehensive chart generation"""
     st.markdown('<div class="tab-content">', unsafe_allow_html=True)
@@ -705,137 +928,6 @@ def automl_section():
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-def chat_section():
-    """Enhanced chat interface with visualization capabilities"""
-    st.markdown('<div class="tab-content">', unsafe_allow_html=True)
-
-    if st.session_state.uploaded_data is None:
-        st.info("📊 Please upload a dataset first.")
-        return
-
-    st.subheader("💬 Chat with Your Data")
-
-    # Initialize data analyzer if needed
-    if not hasattr(st.session_state, 'data_analyzer') or st.session_state.data_analyzer is None:
-        data_to_use = st.session_state.cleaned_data if st.session_state.cleaned_data is not None else st.session_state.uploaded_data
-        with st.spinner("🧠 Initializing data analyzer..."):
-            st.session_state.data_analyzer = DataAnalyzer()
-            st.session_state.data_analyzer.analyze_dataset(data_to_use)
-        st.session_state.current_step = 5
-
-    # Chat container
-    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
-
-    # Display chat history
-    for chat in st.session_state.chat_history:
-        if chat["role"] == "user":
-            st.markdown(f"**You:** {chat['message']}")
-        else:
-            st.markdown(f"**AI:** {chat['message']}")
-            
-            # Display visualization if available
-            if "chart_data" in chat and chat["chart_data"] is not None:
-                chart_data = chat["chart_data"]
-                try:
-                    if chart_data["type"] == "histogram":
-                        fig = px.histogram(x=chart_data["data"], title=chart_data["title"])
-                        st.plotly_chart(fig, use_container_width=True)
-                    elif chart_data["type"] == "scatter":
-                        fig = px.scatter(x=chart_data["x_data"], y=chart_data["y_data"], title=chart_data["title"])
-                        st.plotly_chart(fig, use_container_width=True)
-                    elif chart_data["type"] == "bar":
-                        fig = px.bar(x=chart_data["categories"], y=chart_data["values"], title=chart_data["title"])
-                        st.plotly_chart(fig, use_container_width=True)
-                except Exception as e:
-                    st.warning(f"Could not display chart: {str(e)}")
-            
-        st.markdown("---")
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # Chat input
-    user_message = st.chat_input("Ask anything about your data...")
-
-    if user_message:
-        # Add user message
-        st.session_state.chat_history.append({"role": "user", "message": user_message})
-
-        # Get AI response
-        with st.spinner("🧠 Thinking..."):
-            try:
-                response = st.session_state.data_analyzer.chat_with_data(user_message)
-                st.session_state.chat_history.append({
-                    "role": "assistant", 
-                    "message": response["text"],
-                    "chart_data": response.get("chart_data")
-                })
-                st.rerun()
-            except Exception as e:
-                error_msg = f"Sorry, I encountered an error: {str(e)}"
-                st.session_state.chat_history.append({"role": "assistant", "message": error_msg})
-                st.rerun()
-
-    # Quick questions with visualization suggestions
-    st.subheader("🚀 Try These Questions")
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        if st.button("📊 Summarize dataset", use_container_width=True):
-            st.session_state.chat_history.append({"role": "user", "message": "Summarize this dataset"})
-            st.rerun()
-
-    with col2:
-        if st.button("📈 Show distributions", use_container_width=True):
-            st.session_state.chat_history.append({"role": "user", "message": "Show me the distribution of numerical columns"})
-            st.rerun()
-
-    with col3:
-        if st.button("🔍 Find correlations", use_container_width=True):
-            st.session_state.chat_history.append({"role": "user", "message": "What are the strongest correlations in the data?"})
-            st.rerun()
-
-    # Advanced visualization options
-    st.subheader("📊 Quick Visualizations")
-    
-    col_a, col_b, col_c = st.columns(3)
-    
-    with col_a:
-        if st.button("📊 Distribution Plots", use_container_width=True):
-            with st.spinner("Generating distribution plots..."):
-                try:
-                    visualizations = st.session_state.data_analyzer.generate_visualizations("distribution")
-                    for chart_name, fig in visualizations.items():
-                        st.plotly_chart(fig, use_container_width=True, key=f"quick_{chart_name}")
-                except Exception as e:
-                    st.error(f"Failed to generate plots: {str(e)}")
-    
-    with col_b:
-        if st.button("🔗 Correlation Matrix", use_container_width=True):
-            with st.spinner("Generating correlation matrix..."):
-                try:
-                    visualizations = st.session_state.data_analyzer.generate_visualizations("correlation")
-                    for chart_name, fig in visualizations.items():
-                        st.plotly_chart(fig, use_container_width=True, key=f"quick_{chart_name}")
-                except Exception as e:
-                    st.error(f"Failed to generate correlation: {str(e)}")
-    
-    with col_c:
-        if st.button("❓ Missing Data", use_container_width=True):
-            with st.spinner("Analyzing missing data..."):
-                try:
-                    visualizations = st.session_state.data_analyzer.generate_visualizations("missing")
-                    for chart_name, fig in visualizations.items():
-                        st.plotly_chart(fig, use_container_width=True, key=f"quick_{chart_name}")
-                except Exception as e:
-                    st.error(f"Failed to analyze missing data: {str(e)}")
-
-    # Clear chat
-    if st.button("🗑️ Clear Chat"):
-        st.session_state.chat_history = []
-        st.rerun()
-
-    st.markdown('</div>', unsafe_allow_html=True)
 
 def results_section():
     """Simplified results and download"""

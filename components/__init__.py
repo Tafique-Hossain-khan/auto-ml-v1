@@ -22,7 +22,7 @@ from .utils import (
     ModelPredictor, validate_dataframe
 )
 from .data_cleaner import DataCleaningAgent, create_data_cleaning_agent
-from .chat_agent import ChatWithDataAgent, create_chat_agent, quick_data_summary
+from .chat_agent import ChatWithDataAgent, create_chat_agent
 
 __all__ = [
     # Core components
